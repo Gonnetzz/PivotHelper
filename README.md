@@ -23,8 +23,7 @@ Copyright (c) The 3rdeth oldest AOE II group... where 60% of the time we play ao
 
 
 
-
-
-
 - Nur Mystische änderungen werden akzeptiert 🗣️🗣️
+
+![alt text](Preview.png "preview")
 
