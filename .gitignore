@@ -1,0 +1,11 @@
+# Ignore files
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.lua
+
+# Ignore folder
+.vs/
+x64/
+out/
