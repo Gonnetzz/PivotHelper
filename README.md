@@ -5,7 +5,7 @@ Based on [Samster Birdies Pivot Calculator](https://www.samsterbirdies.com/tools
 
 ## Dependencies
 
-[`Dear ImGui`](https://github.com/ocornut/imgui)
+[`ImGui`](https://github.com/ocornut/imgui)
 [`GLFW`](https://www.glfw.org)
 [`GLEW`](http://glew.sourceforge.net)
 [`DevIL`](https://github.com/DentonW/DevIL)
