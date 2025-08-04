@@ -52,13 +52,14 @@ namespace {
 
     void RenderFramesEditor(SpriteState& activeStateData, SpriteData* spriteData, const std::string& selectedSpriteName, std::string& successMessage, std::string& errorMessage) {
         ImGui::BeginChild("FrameList", ImVec2(0, 150), true);
+        int frame_to_delete = -1;
         for (int i = 0; i < activeStateData.frames.size(); ++i) {
             ImGui::PushID(i);
             SpriteFrame& frame = activeStateData.frames[i];
             char pathBuffer[256];
             strncpy_s(pathBuffer, frame.texturePath.c_str(), sizeof(pathBuffer));
             ImGui::Text("Frame %d", i + 1);
-            ImGui::PushItemWidth(-1);
+            ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 30);
             if (ImGui::InputText("##TexturePath", pathBuffer, sizeof(pathBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
                 std::string newPath = pathBuffer;
                 if (newPath != frame.texturePath) {
@@ -77,9 +78,21 @@ namespace {
                 }
             }
             ImGui::PopItemWidth();
+            ImGui::SameLine();
+            if (ImGui::Button("-")) {
+                frame_to_delete = i;
+            }
             ImGui::PopID();
         }
+        if (frame_to_delete != -1) {
+            activeStateData.frames.erase(activeStateData.frames.begin() + frame_to_delete);
+        }
         ImGui::EndChild();
+
+        if (ImGui::Button("Add Frame", ImVec2(-1, 0))) {
+            activeStateData.frames.push_back(SpriteFrame{});
+        }
+
         ImGui::Separator();
         ImGui::InputFloat("Duration", &activeStateData.duration, 0.01f, 0.1f, "%.3f");
         ImGui::Checkbox("Mipmap", &activeStateData.mipmap);

@@ -16,6 +16,10 @@
 #include <il/il.h>
 #include <IL/ilu.h>
 #include <algorithm>
+#include <windows.h>
+#include <shellapi.h>
+
+#define NOMINMAX
 
 namespace {
     std::unique_ptr<SpriteData> g_spriteData;
@@ -46,11 +50,11 @@ namespace SpritePreviewer {
             if (pair.second.states.count(stateName)) {
                 const auto& state = pair.second.states.at(stateName);
                 if (!state.isLink) {
-                    max_frames = std::max(max_frames, (int)state.frames.size());
+                    max_frames = max(max_frames, (int)state.frames.size());
                 }
             }
         }
-        return std::max(1, max_frames);
+        return max(1, max_frames);
     }
 
     void Initialize() {
@@ -157,11 +161,16 @@ namespace SpritePreviewer {
                     if (!path.empty() && g_spriteData) Export::SaveToFile(path, g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("Open Laser.lua")) { LoadFile("weapons/beamlaser.lua"); }
                 if (ImGui::MenuItem("Open Cannon.lua")) { LoadFile("weapons/cannon.lua"); }
                 if (ImGui::MenuItem("Open Turbine.lua")) { LoadFile("devices/windturbine.lua"); }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Quit", "Ctrl+Q")) { isRunning = false; }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Help")) {
+                if (ImGui::MenuItem("Samster Birdies")) {
+                    ShellExecuteA(NULL, "open", "https://www.samsterbirdies.com/tools/fortspivots", NULL, NULL, SW_SHOWNORMAL);
+                }
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
