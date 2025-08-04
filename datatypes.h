@@ -10,8 +10,9 @@
 
 const std::vector<std::string> SUPPORTED_IMAGE_EXTENSIONS = {
     ".dds",
+    ".tga",
     ".png",
-    ".tga"
+    ".jpg"
 };
 
 constexpr ImU32 COLOR_HIERARCHY_FRONT = IM_COL32(100, 255, 100, 255);

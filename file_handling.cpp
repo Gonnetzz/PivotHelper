@@ -23,6 +23,12 @@ extern "C" {
 }
 
 namespace {
+    static int dummy_dofile(lua_State* L) {
+        return 0;
+    }
+    static int dummy_require(lua_State* L) {
+        return 0;
+    }
     std::unique_ptr<Node> parse_node(lua_State* L, int index) {
         auto node = std::make_unique<Node>();
         lua_getfield(L, index, "Name"); if (lua_isstring(L, -1)) node->name = lua_tostring(L, -1); lua_pop(L, 1);
@@ -149,8 +155,6 @@ void load_sprite_file(
         }
     }
 
-    Environment::UpdateSearchPathsForFile(script_relative_path);
-
     auto find_absolute = [&](const std::string& rel_path) -> std::filesystem::path {
         std::filesystem::path file_path(rel_path);
         if (file_path.is_absolute() && std::filesystem::exists(file_path)) return file_path.lexically_normal();
@@ -167,14 +171,49 @@ void load_sprite_file(
         return;
     }
 
-    std::filesystem::path base_path = Environment::GetSearchPaths().empty() ? "" : Environment::GetSearchPaths().front();
+    Environment::UpdateSearchPathsForFile(script_relative_path);
+    const auto& searchPaths = Environment::GetSearchPaths();
+    std::filesystem::path base_path = searchPaths.empty() ? "" : searchPaths.front();
 
     CurrentPathGuard path_guard(base_path);
     auto data = std::make_unique<SpriteData>();
     lua_State* L = luaL_newstate();
     luaL_openlibs(L);
 
-    if (luaL_dofile(L, std::filesystem::relative(script_path, base_path).string().c_str()) != LUA_OK) {
+    lua_pushcfunction(L, dummy_dofile);
+    lua_setglobal(L, "dofile");
+    lua_pushcfunction(L, dummy_require);
+    lua_setglobal(L, "require");
+
+    std::string path_variable = "";
+    if (searchPaths.size() > 1) {//Inside mod
+        std::filesystem::path mod_root_path = searchPaths[0];
+        std::filesystem::path data_path = searchPaths[1];
+        try {
+            std::filesystem::path relative_path = std::filesystem::relative(mod_root_path, data_path);
+            path_variable = relative_path.string();
+            std::replace(path_variable.begin(), path_variable.end(), '\\', '/');
+            std::string mod_root_str = mod_root_path.string();
+            std::string data_str = data_path.string();
+            size_t pos = mod_root_str.find(data_str);
+            if (pos != std::string::npos) {
+                path_variable = mod_root_str.substr(pos + data_str.length() + 1);
+                std::replace(path_variable.begin(), path_variable.end(), '\\', '/');
+            }
+            else {
+                path_variable = "";
+            }
+
+        }
+        catch (const std::filesystem::filesystem_error& e) {
+            path_variable = "";
+        }
+    }
+    lua_pushstring(L, path_variable.c_str());
+    lua_setglobal(L, "path");
+
+
+    if (luaL_dofile(L, script_path.string().c_str()) != LUA_OK) {
         errorMessage = "Lua Error: " + std::string(lua_tostring(L, -1));
         lua_close(L);
         return;

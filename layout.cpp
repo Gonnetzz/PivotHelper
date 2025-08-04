@@ -10,6 +10,7 @@
 #include "timeline.h"
 #include "environment.h"
 #include "file_dialog.h"
+#include "hotkeys.h"
 
 #include <imgui.h>
 #include <il/il.h>
@@ -35,21 +36,23 @@ namespace {
     int g_maxFrames = 1;
     float g_frameTimer = 0.0f;
     std::string g_startupNotification;
-
-    void NewProject() {
-        g_spriteData = std::make_unique<SpriteData>();
-        g_spriteData->root = std::make_unique<Node>();
-        g_spriteData->root->name = "Root";
-        g_selectedNode = nullptr;
-        g_activeState = "Normal";
-        g_maxFrames = 1;
-        g_activeFrame = 0;
-        g_errorMessage.clear();
-        g_successMessage = "New project created.";
-    }
 }
 
 namespace SpritePreviewer {
+    int CalculateMaxFrames(SpriteData* spriteData, const std::string& stateName) {
+        if (!spriteData) return 1;
+        int max_frames = 0;
+        for (const auto& pair : spriteData->sprites) {
+            if (pair.second.states.count(stateName)) {
+                const auto& state = pair.second.states.at(stateName);
+                if (!state.isLink) {
+                    max_frames = std::max(max_frames, (int)state.frames.size());
+                }
+            }
+        }
+        return std::max(1, max_frames);
+    }
+
     void Initialize() {
         ilInit();
         iluInit();
@@ -93,9 +96,48 @@ namespace SpritePreviewer {
         g_startupNotification.clear();
         load_sprite_file(path, g_spriteData, g_errorMessage, g_successMessage, g_canvas);
         g_selectedNode = nullptr;
-        if (g_spriteData) g_activeState = g_spriteData->defaultState;
+        if (g_spriteData) {
+            g_activeState = g_spriteData->defaultState;
+            g_maxFrames = CalculateMaxFrames(g_spriteData.get(), g_activeState);
+        }
+        else {
+            g_maxFrames = 1;
+        }
+        g_activeFrame = 0;
+    }
+
+    void NewProject() {
+        g_spriteData = std::make_unique<SpriteData>();
+        g_spriteData->root = std::make_unique<Node>();
+        g_spriteData->root->name = "Root";
+        g_selectedNode = nullptr;
+        g_activeState = "Normal";
         g_maxFrames = 1;
         g_activeFrame = 0;
+        g_errorMessage.clear();
+        g_successMessage = "New project created.";
+    }
+
+    void HandleHotkeys(bool& isRunning) {
+        Hotkeys::Action action = Hotkeys::Process();
+        switch (action) {
+        case Hotkeys::Action::New:    NewProject(); break;
+        case Hotkeys::Action::Open: {
+            std::string path = FileDialog::OpenFile("Lua Files (*.lua)\0*.lua\0All Files (*.*)\0*.*\0");
+            if (!path.empty()) LoadFile(path);
+            break;
+        }
+        case Hotkeys::Action::Save:
+            if (g_spriteData) Export::SaveToFile("export.lua", g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
+            break;
+        case Hotkeys::Action::SaveAs: {
+            std::string path = FileDialog::SaveFile("Lua Files (*.lua)\0*.lua\0All Files (*.*)\0*.*\0");
+            if (!path.empty() && g_spriteData) Export::SaveToFile(path, g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
+            break;
+        }
+        case Hotkeys::Action::Quit:   isRunning = false; break;
+        default: break;
+        }
     }
 
     void RenderMenuBar(bool& isRunning) {
@@ -103,22 +145,19 @@ namespace SpritePreviewer {
             if (ImGui::BeginMenu("File")) {
                 if (ImGui::MenuItem("New", "Ctrl+N")) { NewProject(); }
                 if (ImGui::MenuItem("Open...", "Ctrl+O")) {
-                    std::string path = NativeFileDialog::OpenFile("Lua Files\0*.lua\0All Files\0*.*\0");
-                    if (!path.empty()) {
-                        LoadFile(path);
-                    }
+                    std::string path = FileDialog::OpenFile("Lua Files (*.lua)\0*.lua\0All Files (*.*)\0*.*\0");
+                    if (!path.empty()) LoadFile(path);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Save", "Ctrl+S")) {
                     if (g_spriteData) Export::SaveToFile("export.lua", g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
                 }
                 if (ImGui::MenuItem("Save As...", "Shift+Ctrl+S")) {
-                    std::string path = NativeFileDialog::SaveFile("Lua Files\0*.lua\0All Files\0*.*\0");
-                    if (!path.empty()) {
-                        Export::SaveToFile(path, g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
-                    }
+                    std::string path = FileDialog::SaveFile("Lua Files (*.lua)\0*.lua\0All Files (*.*)\0*.*\0");
+                    if (!path.empty() && g_spriteData) Export::SaveToFile(path, g_spriteData->root.get(), g_spriteData->sprites, g_successMessage, g_errorMessage);
                 }
                 ImGui::Separator();
+                if (ImGui::MenuItem("Open Laser.lua")) { LoadFile("weapons/beamlaser.lua"); }
                 if (ImGui::MenuItem("Open Cannon.lua")) { LoadFile("weapons/cannon.lua"); }
                 if (ImGui::MenuItem("Open Turbine.lua")) { LoadFile("devices/windturbine.lua"); }
                 ImGui::Separator();
@@ -130,7 +169,6 @@ namespace SpritePreviewer {
     }
 
     void RenderStatusBar() {
-        float menuBarHeight = ImGui::GetFrameHeight();
         float statusBarHeight = ImGui::GetFrameHeight();
         ImGui::SetNextWindowPos(ImVec2(0, ImGui::GetIO().DisplaySize.y - statusBarHeight));
         ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, statusBarHeight));
@@ -151,6 +189,7 @@ namespace SpritePreviewer {
 
     void RenderUI(bool& isRunning) {
         RenderMenuBar(isRunning);
+        HandleHotkeys(isRunning);
 
         float menuBarHeight = ImGui::GetFrameHeight();
         float statusBarHeight = ImGui::GetFrameHeight();

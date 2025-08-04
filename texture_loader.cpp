@@ -5,26 +5,15 @@
 #include <iostream>
 #include <il/il.h>
 #include <IL/ilu.h>
+#include <gli/gli.hpp>
 #include <algorithm>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
 namespace {
-
-    std::string wide_to_utf8(const std::wstring& wide_string) {
-        if (wide_string.empty()) return std::string();
-#ifdef _WIN32
-        int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wide_string[0], (int)wide_string.size(), NULL, 0, NULL, NULL);
-        std::string str_to(size_needed, 0);
-        WideCharToMultiByte(CP_UTF8, 0, &wide_string[0], (int)wide_string.size(), &str_to[0], size_needed, NULL, NULL);
-        return str_to;
-#else
-        return std::string(wide_string.begin(), wide_string.end());
-#endif
-    }
-
     std::filesystem::path find_absolute_path(const std::string& relative_path) {
         std::filesystem::path file_path(relative_path);
         if (file_path.empty()) return "";
@@ -37,29 +26,23 @@ namespace {
         return "";
     }
 
-    ILenum get_il_type_from_path(const std::filesystem::path& path) {
-        std::string ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        if (ext == ".dds") return IL_DDS;
-        if (ext == ".png") return IL_PNG;
-        if (ext == ".tga") return IL_TGA;
-        if (ext == ".bmp") return IL_BMP;
-        if (ext == ".jpg" || ext == ".jpeg") return IL_JPG;
-        return IL_TYPE_UNKNOWN;
-    }
-
     GLuint LoadTextureFromFile(const std::string& texture_relative_path, std::string& errorMessage) {
+        std::filesystem::path found_path;
         std::filesystem::path original_path(texture_relative_path);
-        std::filesystem::path found_path = find_absolute_path(original_path.string());
+
+        found_path = find_absolute_path(texture_relative_path);
 
         if (found_path.empty()) {
-            std::filesystem::path stem = original_path.stem();
-            std::filesystem::path parent_path = original_path.parent_path();
+            std::filesystem::path path_without_ext = original_path;
+            path_without_ext.replace_extension();
+
             for (const auto& ext : SUPPORTED_IMAGE_EXTENSIONS) {
-                std::filesystem::path new_relative_path = parent_path / stem;
-                new_relative_path += ext;
-                found_path = find_absolute_path(new_relative_path.string());
-                if (!found_path.empty()) break;
+                std::filesystem::path new_path = path_without_ext;
+                new_path += ext;
+                found_path = find_absolute_path(new_path.string());
+                if (!found_path.empty()) {
+                    break;
+                }
             }
         }
 
@@ -67,31 +50,66 @@ namespace {
             errorMessage = "Image not found: " + texture_relative_path;
             return 0;
         }
+        
+        std::string ext = found_path.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
+        // DevIL trolling, no dds for devil then
+        if (ext == ".dds") {
+            gli::texture texture = gli::load(found_path.string());
+            if (texture.empty()) {
+                errorMessage = "GLI Error: Failed to load DDS file " + found_path.string();
+                return 0;
+            }
+
+            gli::gl GL(gli::gl::PROFILE_GL33);
+            gli::gl::format const format = GL.translate(texture.format(), texture.swizzles());
+            GLenum target = GL.translate(texture.target());
+
+            GLuint textureID = 0;
+            glGenTextures(1, &textureID);
+            glBindTexture(target, textureID);
+
+            glm::tvec3<GLsizei> const extent(texture.extent());
+
+            glTexStorage2D(target, static_cast<GLint>(texture.levels()), format.Internal, extent.x, extent.y);
+            for (std::size_t level = 0; level < texture.levels(); ++level)
+            {
+                glm::tvec3<GLsizei> level_extent(texture.extent(level));
+                if (gli::is_compressed(texture.format())) {
+                    glCompressedTexSubImage2D(target, static_cast<GLint>(level), 0, 0, level_extent.x, level_extent.y, format.Internal, static_cast<GLsizei>(texture.size(level)), texture.data(0, 0, level));
+                }
+                else {
+                    glTexSubImage2D(target, static_cast<GLint>(level), 0, 0, level_extent.x, level_extent.y, format.External, format.Type, texture.data(0, 0, level));
+                }
+            }
+            return textureID;
+        }
+
+        // For all other formats, use DevIL
         std::ifstream file(found_path, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
-            errorMessage = "C++ Error: Could not open file " + found_path.string();
+            errorMessage = "Error: Could not open file " + found_path.string();
             return 0;
         }
         std::vector<char> buffer(file.tellg());
         file.seekg(0, std::ios::beg);
         if (!file.read(buffer.data(), buffer.size())) {
-            errorMessage = "C++ Error: Could not read file " + found_path.string();
+            errorMessage = "Error: Could not read file " + found_path.string();
             return 0;
         }
 
         ILuint imageID;
         ilGenImages(1, &imageID); ilBindImage(imageID);
-        ILenum imageType = get_il_type_from_path(found_path);
-        if (!ilLoadL(imageType, buffer.data(), buffer.size())) {
+        if (!ilLoadL(IL_TYPE_UNKNOWN, buffer.data(), buffer.size())) {
             ILenum err = ilGetError();
-            errorMessage = "DevIL Load Error " + std::to_string(err) + ": " + wide_to_utf8(iluErrorString(err));
+            errorMessage = "DevIL Load Error " + std::to_string(err);
             ilDeleteImages(1, &imageID); return 0;
         }
         if (ilGetInteger(IL_IMAGE_ORIGIN) == IL_ORIGIN_LOWER_LEFT) iluFlipImage();
         if (!ilConvertImage(IL_RGBA, IL_UNSIGNED_BYTE)) {
             ILenum err = ilGetError();
-            errorMessage = "DevIL Convert Error " + std::to_string(err) + ": " + wide_to_utf8(iluErrorString(err));
+            errorMessage = "DevIL Convert Error " + std::to_string(err);
             ilDeleteImages(1, &imageID); return 0;
         }
 
@@ -107,6 +125,9 @@ namespace {
 }
 
 GLuint TextureLoader::LoadOrGetTexture(const std::string& path, SpriteData& spriteData, std::string& errorMessage) {
+    if (path.empty()) {
+        return 0;
+    }
     if (spriteData.loadedTextures.count(path)) {
         return spriteData.loadedTextures.at(path);
     }

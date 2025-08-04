@@ -2,7 +2,7 @@
 #include <string>
 
 #ifdef _WIN32
-namespace NativeFileDialog {
+namespace FileDialog {
     std::string OpenFile(const char* filter);
     std::string SaveFile(const char* filter);
 }

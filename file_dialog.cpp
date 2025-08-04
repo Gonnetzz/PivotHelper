@@ -7,21 +7,21 @@
 #include <vector>
 #include <algorithm>
 
-namespace NativeFileDialog {
+namespace FileDialog {
     namespace {
         std::wstring utf8_to_wide(const std::string& utf8_string) {
             if (utf8_string.empty()) return std::wstring();
-            int size_needed = MultiByteToWideChar(CP_UTF8, 0, &utf8_string[0], (int)utf8_string.size(), NULL, 0);
+            int size_needed = MultiByteToWideChar(CP_UTF8, 0, utf8_string.c_str(), (int)utf8_string.size(), NULL, 0);
             std::wstring wstrTo(size_needed, 0);
-            MultiByteToWideChar(CP_UTF8, 0, &utf8_string[0], (int)utf8_string.size(), &wstrTo[0], size_needed);
+            MultiByteToWideChar(CP_UTF8, 0, utf8_string.c_str(), (int)utf8_string.size(), &wstrTo[0], size_needed);
             return wstrTo;
         }
 
         std::string wide_to_utf8(const std::wstring& wide_string) {
             if (wide_string.empty()) return std::string();
-            int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wide_string[0], (int)wide_string.size(), NULL, 0, NULL, NULL);
+            int size_needed = WideCharToMultiByte(CP_UTF8, 0, wide_string.c_str(), (int)wide_string.size(), NULL, 0, NULL, NULL);
             std::string strTo(size_needed, 0);
-            WideCharToMultiByte(CP_UTF8, 0, &wide_string[0], (int)wide_string.size(), &strTo[0], size_needed, NULL, NULL);
+            WideCharToMultiByte(CP_UTF8, 0, wide_string.c_str(), (int)wide_string.size(), &strTo[0], size_needed, NULL, NULL);
             return strTo;
         }
     }
@@ -34,11 +34,15 @@ namespace NativeFileDialog {
         ofn.lpstrFile = filename;
         ofn.nMaxFile = MAX_PATH;
 
-        std::wstring wide_filter = utf8_to_wide(filter);
-        std::vector<wchar_t> filter_buffer(wide_filter.begin(), wide_filter.end());
-        for (auto& c : filter_buffer) if (c == L'\0') c = L'|';
-        std::replace(filter_buffer.begin(), filter_buffer.end(), L'|', L'\0');
-        ofn.lpstrFilter = filter_buffer.data();
+        std::string filter_str(filter);
+        if (filter_str.empty() || filter_str.back() != '\0') {
+            filter_str.push_back('\0');
+        }
+        if (filter_str.size() < 2 || filter_str[filter_str.size() - 2] != '\0') {
+            filter_str.push_back('\0');
+        }
+        std::wstring wide_filter = utf8_to_wide(filter_str);
+        ofn.lpstrFilter = wide_filter.c_str();
 
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
@@ -60,11 +64,15 @@ namespace NativeFileDialog {
         ofn.lpstrFile = filename;
         ofn.nMaxFile = MAX_PATH;
 
-        std::wstring wide_filter = utf8_to_wide(filter);
-        std::vector<wchar_t> filter_buffer(wide_filter.begin(), wide_filter.end());
-        for (auto& c : filter_buffer) if (c == L'\0') c = L'|';
-        std::replace(filter_buffer.begin(), filter_buffer.end(), L'|', L'\0');
-        ofn.lpstrFilter = filter_buffer.data();
+        std::string filter_str(filter);
+        if (filter_str.empty() || filter_str.back() != '\0') {
+            filter_str.push_back('\0');
+        }
+        if (filter_str.size() < 2 || filter_str[filter_str.size() - 2] != '\0') {
+            filter_str.push_back('\0');
+        }
+        std::wstring wide_filter = utf8_to_wide(filter_str);
+        ofn.lpstrFilter = wide_filter.c_str();
 
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;

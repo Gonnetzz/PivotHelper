@@ -3,17 +3,22 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <IL/il.h>
+#include <IL/ilu.h>
 #include "layout.h"
 #include "environment.h"
 #include <iostream>
 
 #define NOMINMAX
 
+
 void glfw_error_callback(int error, const char* description) {
     fprintf(stderr, "Glfw Error %d: %s\n", error, description);
 }
 
 int main(int, char**) {
+    ilInit();
+    iluInit();
     glfwSetErrorCallback(glfw_error_callback);
     if (!glfwInit()) return 1;
 
